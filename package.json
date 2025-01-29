@@ -1,6 +1,6 @@
 {
   "name": "vscode-simple-tracker",
-  "displayName": "vscode-simple-tracker",
+  "displayName": "Simple Time Tracker",
   "description": "Track what you work on inside of VS Code",
   "version": "0.0.1",
   "engines": {
@@ -9,14 +9,11 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "extensionDependencies": ["vscode.git"],
+  "activationEvents": ["onStartupFinished"],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "vscode-simple-tracker.helloWorld",
-        "title": "Hello World"
-      }
     ]
   },
   "scripts": {

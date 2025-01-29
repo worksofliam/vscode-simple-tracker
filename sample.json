@@ -1,11 +1,7 @@
 {
   "dd/mm/yyyy": {
     "projects": {
-      "none": {
-        "seconds": 1
-      },
       "vscode-ibmi": {
-        "seconds": 1,
         "branches": {
           "seconds": 1
         }

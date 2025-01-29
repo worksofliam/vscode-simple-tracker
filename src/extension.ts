@@ -4,12 +4,15 @@ import * as vscode from 'vscode';
 import { TimeManager } from './manager';
 import { getGitBranch } from './git';
 
-const tracker = new TimeManager();
+let tracker: TimeManager;
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
 	console.log('Congratulations, your extension "vscode-simple-tracker" is now active!');
+
+	tracker = new TimeManager();
+	await tracker.load();
 
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 0);
 	statusBarItem.text = '$(clock) 0';
@@ -46,7 +49,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 // This method is called when your extension is deactivated
 export function deactivate() {
-	vscode.workspace.workspaceFolders?.forEach((folder) => {
-		tracker.endTracking(folder);
-	});
+	if (tracker) {
+		vscode.workspace.workspaceFolders?.forEach((folder) => {
+			tracker.endTracking(folder);
+		});
+	}
 }

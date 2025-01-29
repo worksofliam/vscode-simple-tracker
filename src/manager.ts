@@ -1,4 +1,7 @@
-import { env, WorkspaceFolder } from "vscode";
+import { readFile, writeFile } from "fs/promises";
+import path from "path";
+import { env } from "process";
+import { WorkspaceFolder } from "vscode";
 
 interface OptionalTrackerDetails {
   branches?: string[];
@@ -17,7 +20,7 @@ interface TrackerFile {
 }
 
 export type ActiveProjectList = {[id: string]: Date};
-
+const TRACKER_FILE = path.join(env.HOME || ".", ".vscode-tracker.json");
 
 export class TimeManager {
   private store: TrackerFile = {};
@@ -25,13 +28,21 @@ export class TimeManager {
 
   changeEvent?: (projects: ActiveProjectList) => void;
 
-  load() {
+  async load() {
     // load from file
     
+    try {
+      const contents = await readFile(TRACKER_FILE, "utf-8");
+      this.store = JSON.parse(contents);
+    } catch (error) {
+      console.error("Failed to load tracker file", error);
+    }
   }
 
-  save() {
+  private save() {
     // save to file
+    const contents = JSON.stringify(this.store, null, 2);
+    return writeFile(TRACKER_FILE, contents, "utf-8");
   }
 
   private trigger() {
@@ -107,5 +118,7 @@ export class TimeManager {
 
     delete this.activeProjects[ws.name];
     this.trigger();
+
+    this.save();
   }
 }

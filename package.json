@@ -2,13 +2,17 @@
   "name": "vscode-simple-tracker",
   "displayName": "Simple Time Tracker",
   "description": "Track what you work on inside of VS Code",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.96.0"
   },
   "categories": [
     "Other"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/worksofliam/vscode-simple-tracker"
+  },
   "extensionDependencies": ["vscode.git"],
   "activationEvents": ["onStartupFinished"],
   "main": "./dist/extension.js",

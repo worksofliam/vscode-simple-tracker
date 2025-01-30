@@ -42,7 +42,7 @@ function dateString(minusDays = 0) {
 }
 
 export class TimeManager {
-  private store: TrackerFile = {version: "v1", days: {}};
+  private store: TrackerFile = {version: CURRENT_SCHEMA_VERSION, days: {}};
   private activeProjects: ActiveProjectList = {};
 
 	getTracking() {
@@ -50,25 +50,47 @@ export class TimeManager {
 	}
 
   async load() {
-    // load from file
-
     try {
       const contents = await readFile(TRACKER_FILE, "utf-8");
       this.store = JSON.parse(contents);
 
+      // If we need to make changes to the schema...
       if (this.store.version !== CURRENT_SCHEMA_VERSION) {
-        for (const day in this.store) {
+        for (const day in this.store.days) {
           this.validateDaySchema(day, {all: true});
         }
+
+        this.store.version = CURRENT_SCHEMA_VERSION;
       }
     } catch (error) {
       console.error("Failed to load tracker file", error);
     }
   }
 
-  public save() {
-    // save to file
-    const contents = JSON.stringify(this.store);
+  async checkForChanges() {
+    const loadedContents = await readFile(TRACKER_FILE, "utf-8");
+    const loadedStore = JSON.parse(loadedContents);
+
+    const today = dateString();
+    
+    if (!this.store.days[today] || !loadedStore.days || !loadedStore.days[today]) {
+      return;
+    }
+
+    let updatedProjects: {[id: string]: TrackerDetails} = loadedStore.days[today].projects;
+
+    for (const pid of Object.keys(this.activeProjects)) {
+      if (this.store.days[today].projects[pid]) {
+        updatedProjects[pid] = this.store.days[today].projects[pid];
+      }
+    }
+    
+    this.store.days[today].projects = updatedProjects;
+  }
+
+  public async save() {
+    await this.checkForChanges();
+    const contents = JSON.stringify(this.store, null, 2);
     return writeFile(TRACKER_FILE, contents, "utf-8");
   }
 
@@ -135,6 +157,12 @@ export class TimeManager {
   startTracking(ws: WorkspaceFolder) {
     this.activeProjects[ws.name] = new Date();
   }
+
+  endTracking(ws: WorkspaceFolder) {
+    this.updateDaySeconds(ws.name);
+
+    delete this.activeProjects[ws.name];
+  }
   
   private validateDaySchema(chosenDay: string, project: { id?: string, all?: boolean } = {}) {
     if (!this.store.days[chosenDay]) {
@@ -157,6 +185,14 @@ export class TimeManager {
 
         if (!this.store.days[chosenDay].projects[id].seconds) {
           this.store.days[chosenDay].projects[id].seconds = 0;
+        }
+
+        if (!this.store.days[chosenDay].projects[id].tasks) {
+          this.store.days[chosenDay].projects[id].tasks = 0;
+        }
+
+        if (!this.store.days[chosenDay].projects[id].debugs) {
+          this.store.days[chosenDay].projects[id].debugs = 0;
         }
 
       } else {
@@ -234,11 +270,5 @@ export class TimeManager {
     this.updateDetails(specificProject, { seconds });
 
     this.activeProjects[specificProject] = new Date();
-  }
-
-  endTracking(ws: WorkspaceFolder) {
-    this.updateDaySeconds(ws.name);
-
-    delete this.activeProjects[ws.name];
   }
 }

@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { env } from "process";
 import { WorkspaceFolder } from "vscode";
@@ -19,16 +19,17 @@ interface DayData {
   }
 }
 
-type SchemaVersion = "v1"|"v2";
-const CURRENT_SCHEMA_VERSION: SchemaVersion = `v2`;
+type SchemaVersion = "v1" | "v2";
+const CURRENT_SCHEMA_VERSION: SchemaVersion = `v1`;
 interface TrackerFile {
   version: SchemaVersion;
-  days: {[date: string]: DayData}
+  day: DayData
 }
 
 export type ActiveProjectList = { [id: string]: Date };
+interface ProjectFilter { id?: string, all?: boolean };
 
-const TRACKER_FILE = path.join(env.HOME || ".", `.vscode-tracker-${new Date().getFullYear()}.json`);
+const TRACKER_DIR = path.join(env.HOME || ".", ".vscode-tracker");
 
 function secondsSize(pastTime: Date) {
   return (new Date().getTime() - pastTime.getTime()) / 1000;
@@ -38,75 +39,208 @@ function dateString(minusDays = 0) {
   // get dd/mm/yyyy
   const specificDate = new Date();
   specificDate.setDate(specificDate.getDate() - minusDays);
-  return `${specificDate.getDate()}/${specificDate.getMonth()+1}/${specificDate.getFullYear()}`;
+  return `${specificDate.getDate()}-${specificDate.getMonth() + 1}-${specificDate.getFullYear()}`;
 }
 
-export class TimeManager {
-  private store: TrackerFile = {version: CURRENT_SCHEMA_VERSION, days: {}};
-  private activeProjects: ActiveProjectList = {};
+class DayManager {
+  private exists = false;
+  private filePath: string;
+  private store: TrackerFile = { version: CURRENT_SCHEMA_VERSION, day: { projects: {}, saves: {} } };
+  constructor(dateString: string) {
+    this.filePath = path.join(TRACKER_DIR, `.vscode-tracker-${dateString}.json`);
+  }
 
-	getTracking() {
-		return Object.keys(this.activeProjects);
-	}
+  public get stats(): DayData|undefined {
+    return this.store.day;
+  }
+
+  public get doesExist() {
+    return this.exists;
+  }
 
   async load() {
     try {
-      const contents = await readFile(TRACKER_FILE, "utf-8");
+      const contents = await readFile(this.filePath, "utf-8");
       this.store = JSON.parse(contents);
 
       // If we need to make changes to the schema...
       if (this.store.version !== CURRENT_SCHEMA_VERSION) {
-        for (const day in this.store.days) {
-          this.validateDaySchema(day, {all: true});
-        }
+        DayManager.validateDaySchema(this.store.day, { all: true });
 
         this.store.version = CURRENT_SCHEMA_VERSION;
       }
+
+      this.exists = true;
     } catch (error) {
-      console.log("Failed to load tracker file", error);
+      // console.log("Failed to load tracker file", error);
+      this.exists = false;
     }
+  }
+
+  public async save(activeProjects: ActiveProjectList) {
+    await this.checkForChanges(activeProjects);
+    const contents = JSON.stringify(this.store, null, 2);
+    this.exists = true;
+    return await writeFile(this.filePath, contents, "utf-8");
   }
 
   /**
-   * Reloads the tracker file and merges the data with the current store
-   * and then saves it back to the file
-   */
-  async checkForChanges() {
-    const loadedContents = await readFile(TRACKER_FILE, "utf-8");
-    const loadedStore = JSON.parse(loadedContents);
+ * Reloads the tracker file and merges the data with the current store
+ * and then saves it back to the file
+ */
+  async checkForChanges(activeProjects: ActiveProjectList) {
+    let loadedContents: string|undefined;
+    try {
+      loadedContents = await readFile(this.filePath, "utf-8");
+    } catch (e) {
+      loadedContents = undefined;
+    }
 
-    const today = dateString();
-    
-    if (!this.store.days[today] || !loadedStore.days || !loadedStore.days[today]) {
+    if (!loadedContents) {
       return;
     }
 
-    let updatedProjects: {[id: string]: TrackerDetails} = loadedStore.days[today].projects;
+    const loadedStore = JSON.parse(loadedContents);
 
-    for (const pid of Object.keys(this.activeProjects)) {
-      if (this.store.days[today].projects[pid]) {
-        updatedProjects[pid] = this.store.days[today].projects[pid];
+    if (!this.store.day || !loadedStore.day) {
+      return;
+    }
+
+    let updatedProjects: { [id: string]: TrackerDetails } = loadedStore.day.projects;
+
+    for (const pid of Object.keys(activeProjects)) {
+      if (this.store.day.projects[pid]) {
+        updatedProjects[pid] = this.store.day.projects[pid];
       }
     }
-    
-    this.store.days[today].projects = updatedProjects;
+
+    this.store.day.projects = updatedProjects;
+  }
+
+  /**
+   * Change specific properties for a project for today
+   */
+  public updateDetails(projectId: string, details: Partial<TrackerDetails>) {
+    const ADD_PROPS: (keyof TrackerDetails)[] = [`seconds`, `tasks`, `debugs`];
+    const today = dateString();
+
+    this.validate({ id: projectId });
+
+    const existingProjects: any = this.store.day.projects[projectId];
+
+    for (const key in details) {
+      if (Array.isArray((details as any)[key])) {
+        // Merge
+        existingProjects[key] = [...new Set([...(existingProjects[key] || []), ...(details as any)[key]])];
+      } else {
+        if (ADD_PROPS.includes(key as keyof TrackerDetails)) {
+          existingProjects[key] += (details as any)[key];
+        } else {
+          existingProjects[key] = (details as any)[key];
+        }
+      }
+    }
+  }
+
+  addSave(ext: string) {
+    this.validate();
+
+    if (!this.store.day.saves[ext]) {
+      this.store.day.saves[ext] = 0;
+    }
+
+    this.store.day.saves[ext]++;
+  }
+
+  validate(project?: ProjectFilter) {
+    DayManager.validateDaySchema(this.store.day, project);
+  }
+
+  /**
+   * Used to ensure the schema is correct for a specific day
+   */
+  private static validateDaySchema(dayObj: DayData, project: ProjectFilter = {}) {
+    if (!dayObj.projects) {
+      dayObj.projects = {};
+    }
+
+    if (!dayObj.saves) {
+      dayObj.saves = {};
+    }
+
+    const fixProject = (id: string) => {
+      if (dayObj.projects[id]) {
+        if (!dayObj.projects[id].branches) {
+          dayObj.projects[id].branches = [];
+        }
+
+        if (!dayObj.projects[id].seconds) {
+          dayObj.projects[id].seconds = 0;
+        }
+
+        if (!dayObj.projects[id].tasks) {
+          dayObj.projects[id].tasks = 0;
+        }
+
+        if (!dayObj.projects[id].debugs) {
+          dayObj.projects[id].debugs = 0;
+        }
+
+      } else {
+        dayObj.projects[id] = { seconds: 0, branches: [], tasks: 0, debugs: 0 };
+      }
+    };
+
+    if (project.id) {
+      fixProject(project.id);
+    } else if (project.all) {
+      for (const id in dayObj.projects) {
+        fixProject(id);
+      }
+    }
+  }
+}
+
+export class TimeManager {
+  private days: { [day: string]: DayManager } = {};
+  private activeProjects: ActiveProjectList = {};
+
+  private get today() {
+    return this.days[dateString()];
+  }
+
+  getTracking() {
+    return Object.keys(this.activeProjects);
+  }
+
+  async load() {
+    await mkdir(TRACKER_DIR, { recursive: true });
+
+    const today = dateString();
+    const todayManager = new DayManager(today);
+    await todayManager.load();
+    this.days[today] = todayManager;
   }
 
   public async save() {
-    await this.checkForChanges();
-    const contents = JSON.stringify(this.store, null, 2);
-    return await writeFile(TRACKER_FILE, contents, "utf-8");
+    const today = dateString();
+    const todayManager = this.days[today];
+    if (!todayManager) {
+      return;
+    }
+
+    await todayManager.save(this.activeProjects);
   }
 
   /**
    * Returns time and branches worked on for a specific branch over a certain amount of days
    */
-  public getStatsForPeriod(project: string, days: number): TrackerDetails {
+  public async getStatsForPeriod(project: string, days: number): Promise<TrackerDetails> {
     const dayKeys = this.getDays(days);
     const stats: TrackerDetails = { seconds: 0, branches: [], tasks: 0, debugs: 0 };
 
     for (const day of dayKeys) {
-      const dayStats = this.getStats(day);
+      const dayStats = await this.getStats(day);
       if (dayStats && dayStats.projects[project]) {
         stats.seconds += dayStats.projects[project].seconds;
 
@@ -125,20 +259,14 @@ export class TimeManager {
   /**
    * Gets data for a specific day
    */
-  public getStats(day: string): DayData|undefined {
-    // TODO: honestly is there a better way to deep clone?
-    if (this.store.days[day]) {
-      const storedStats: DayData = JSON.parse(JSON.stringify(this.store.days[day]));
+  public async getStats(day: string): Promise<DayData | undefined> {
+    if (!this.days[day]) {
+      this.days[day] = new DayManager(day);
+      await this.days[day].load();
+    }
 
-      if (day === dateString()) {
-        for (const wsName in storedStats.projects) {
-          const activeProjectStarted = this.activeProjects[wsName];
-          if (activeProjectStarted) {
-            const secondsSinceThen = secondsSize(activeProjectStarted);
-            storedStats.projects[wsName].seconds += secondsSinceThen;
-          }
-        }
-      }
+    if (this.days[day] && this.days[day].doesExist) {
+      const storedStats: DayData = JSON.parse(JSON.stringify(this.days[day].stats));
 
       return storedStats;
     }
@@ -147,18 +275,13 @@ export class TimeManager {
   /**
    * Gets days where data is available
    */
-  public getDays(lastAmount?: number) {
-    if (lastAmount) {
-      let dayKeys = [];
-      for (let i = 0; i < lastAmount; i++) {
-        let key = dateString(i);
-        dayKeys.push(key);
-      }
-      return dayKeys;
-
-    } else {
-      return Object.keys(this.store).reverse();
+  public getDays(lastAmount: number) {
+    let dayKeys = [];
+    for (let i = 0; i < lastAmount; i++) {
+      let key = dateString(i);
+      dayKeys.push(key);
     }
+    return dayKeys;
   }
 
   startTracking(ws: WorkspaceFolder) {
@@ -170,102 +293,21 @@ export class TimeManager {
 
     delete this.activeProjects[ws.name];
   }
-  
-  /**
-   * Used to ensure the schema is correct for a specific day
-   */
-  private validateDaySchema(chosenDay: string, project: { id?: string, all?: boolean } = {}) {
-    if (!this.store.days[chosenDay]) {
-      this.store.days[chosenDay] = { projects: {}, saves: {} };
-    }
-
-    if (!this.store.days[chosenDay].projects) {
-      this.store.days[chosenDay].projects = {};
-    }
-
-    if (!this.store.days[chosenDay].saves) {
-      this.store.days[chosenDay].saves = {};
-    }
-
-    const fixProject = (id: string) => {
-      if (this.store.days[chosenDay].projects[id]) {
-        if (!this.store.days[chosenDay].projects[id].branches) {
-          this.store.days[chosenDay].projects[id].branches = [];
-        }
-
-        if (!this.store.days[chosenDay].projects[id].seconds) {
-          this.store.days[chosenDay].projects[id].seconds = 0;
-        }
-
-        if (!this.store.days[chosenDay].projects[id].tasks) {
-          this.store.days[chosenDay].projects[id].tasks = 0;
-        }
-
-        if (!this.store.days[chosenDay].projects[id].debugs) {
-          this.store.days[chosenDay].projects[id].debugs = 0;
-        }
-
-      } else {
-        this.store.days[chosenDay].projects[id] = { seconds: 0, branches: [], tasks: 0, debugs: 0 };
-      }
-    };
-
-    if (project.id) {
-      fixProject(project.id);
-    } else if (project.all) {
-      for (const id in this.store.days[chosenDay].projects) {
-        fixProject(id);
-      }
-    }
-  }
-
-  /**
-   * Change specific properties for a project for today
-   */
-  private updateDetails(projectId: string, details: Partial<TrackerDetails>) {
-    const ADD_PROPS: (keyof TrackerDetails)[] = [`seconds`, `tasks`, `debugs`];
-    const today = dateString();
-    
-    this.validateDaySchema(today, {id: projectId});
-
-    const existingData: any = this.store.days[today].projects[projectId];
-
-    for (const key in details) {
-      if (Array.isArray((details as any)[key])) {
-        // Merge
-        existingData[key] = [...new Set([...(existingData[key] || []), ...(details as any)[key]])];
-      } else {
-        if (ADD_PROPS.includes(key as keyof TrackerDetails)) {
-          existingData[key] += (details as any)[key];
-        } else {
-          existingData[key] = (details as any)[key];
-        }
-      }
-    }
-  }
 
   addBranch(ws: WorkspaceFolder, branch: string) {
-    this.updateDetails(ws.name, { branches: [branch] });
+    this.today.updateDetails(ws.name, { branches: [branch] });
   }
 
   incrementTasks(ws: WorkspaceFolder) {
-    this.updateDetails(ws.name, { tasks: 1 });
+    this.today.updateDetails(ws.name, { tasks: 1 });
   }
 
   incrementDebugs(ws: WorkspaceFolder) {
-    this.updateDetails(ws.name, { debugs: 1 });
+    this.today.updateDetails(ws.name, { debugs: 1 });
   }
 
   addSave(ext: string) {
-    const today = dateString();
-    
-    this.validateDaySchema(today);
-
-    if (!this.store.days[today].saves[ext]) {
-      this.store.days[today].saves[ext] = 0;
-    }
-
-    this.store.days[today].saves[ext]++;
+    this.today.addSave(ext);
   }
 
   public updateAllDaySeconds() {
@@ -280,7 +322,7 @@ export class TimeManager {
 
     let seconds = Math.max(0, secondsSize(start));
 
-    this.updateDetails(specificProject, { seconds });
+    this.today.updateDetails(specificProject, { seconds });
 
     this.activeProjects[specificProject] = new Date();
   }

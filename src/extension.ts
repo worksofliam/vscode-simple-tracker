@@ -20,8 +20,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 0);
 
-	const updateStats = () => {
-		const md = getStatsMd();
+	const updateStats = async () => {
+		const md = await getStatsMd();
 		statusBarItem.tooltip = md;
 	};
 
@@ -108,14 +108,15 @@ export async function deactivate() {
 	}
 }
 
-function getStatsMd() {
+async function getStatsMd() {
 	const projectIds = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders.map((f) => f.name) : [];
 
 	let markdown: string[] = [];
 
-	projectIds.forEach((id, i) => {
-		const today = tracker.getStatsForPeriod(id, 1);
-		const week = tracker.getStatsForPeriod(id, 7);
+	for (let i = 0; i < projectIds.length; i++) {
+		const id = projectIds[i];
+		const today = await tracker.getStatsForPeriod(id, 1);
+		const week = await tracker.getStatsForPeriod(id, 7);
 
 		markdown.push(
 			`### ${id}`,
@@ -142,7 +143,7 @@ function getStatsMd() {
 				``
 			);
 		}
-	});
+	};
 
 	const md = new vscode.MarkdownString(markdown.join("\n"));
 	md.supportThemeIcons = true;

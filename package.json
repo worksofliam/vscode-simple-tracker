@@ -1,8 +1,8 @@
 {
   "name": "vscode-simple-tracker",
-  "displayName": "Simple Time Tracker",
+  "displayName": "Simple Usage Tracker",
   "description": "Track what you work on inside of VS Code",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "engines": {
     "vscode": "^1.96.0"
   },

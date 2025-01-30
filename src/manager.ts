@@ -63,10 +63,14 @@ export class TimeManager {
         this.store.version = CURRENT_SCHEMA_VERSION;
       }
     } catch (error) {
-      console.error("Failed to load tracker file", error);
+      console.log("Failed to load tracker file", error);
     }
   }
 
+  /**
+   * Reloads the tracker file and merges the data with the current store
+   * and then saves it back to the file
+   */
   async checkForChanges() {
     const loadedContents = await readFile(TRACKER_FILE, "utf-8");
     const loadedStore = JSON.parse(loadedContents);
@@ -91,7 +95,7 @@ export class TimeManager {
   public async save() {
     await this.checkForChanges();
     const contents = JSON.stringify(this.store, null, 2);
-    return writeFile(TRACKER_FILE, contents, "utf-8");
+    return await writeFile(TRACKER_FILE, contents, "utf-8");
   }
 
   /**
@@ -167,6 +171,9 @@ export class TimeManager {
     delete this.activeProjects[ws.name];
   }
   
+  /**
+   * Used to ensure the schema is correct for a specific day
+   */
   private validateDaySchema(chosenDay: string, project: { id?: string, all?: boolean } = {}) {
     if (!this.store.days[chosenDay]) {
       this.store.days[chosenDay] = { projects: {}, saves: {} };
@@ -212,6 +219,9 @@ export class TimeManager {
     }
   }
 
+  /**
+   * Change specific properties for a project for today
+   */
   private updateDetails(projectId: string, details: Partial<TrackerDetails>) {
     const ADD_PROPS: (keyof TrackerDetails)[] = [`seconds`, `tasks`, `debugs`];
     const today = dateString();

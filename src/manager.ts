@@ -109,6 +109,9 @@ export class TimeManager {
         if (dayStats.projects[project].branches) {
           stats.branches = [...new Set([...(stats.branches!), ...dayStats.projects[project].branches])];
         }
+
+        stats.tasks += dayStats.projects[project].tasks;
+        stats.debugs += dayStats.projects[project].debugs;
       }
     }
 

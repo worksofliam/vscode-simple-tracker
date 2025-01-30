@@ -27,6 +27,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	if (vscode.workspace.workspaceFolders) {
 		statusBarItem.text = `$(clock) ${vscode.workspace.workspaceFolders.length}`;
+
+		updateStats();
+
 		statusBarItem.show();
 
 		updateInterval = setInterval(() => {
@@ -120,12 +123,16 @@ function getStatsMd() {
 			`#### Today`,
 			``,
 			`* $(history) ${formatSeconds(today.seconds)}`,
-			...(today.branches!.length ? [`* $(git-branch) worked on ${today.branches!.join(", ")}`] : []),
+			`* $(git-branch) edited in ${today.branches.length} branch${today.branches.length === 1 ? "" : "es"}`,
+			`* $(debug) ${today.debugs} debug session${today.debugs === 1 ? "" : "s"}`,
+			`* $(output) ${today.tasks} task${today.tasks === 1 ? "" : "s"} started`,
 			``,
 			`#### This Week`,
 			``,
 			`* $(history) ${formatSeconds(week.seconds)}`,
-			...(week.branches!.length ? [`* $(git-branch) worked on ${week.branches!.join(", ")}`] : [])
+			`* $(git-branch) edited in ${week.branches.length} branch${week.branches.length === 1 ? "" : "es"}`,
+			`* $(debug) ${week.debugs} debug session${week.debugs === 1 ? "" : "s"}`,
+			`* $(output) ${week.tasks} task${week.tasks === 1 ? "" : "s"} started`,
 		);
 
 		if (i < projectIds.length - 1) {

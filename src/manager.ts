@@ -66,7 +66,7 @@ export class TimeManager {
 
   public save() {
     // save to file
-    const contents = JSON.stringify(this.store, null, 2);
+    const contents = JSON.stringify(this.store);
     return writeFile(TRACKER_FILE, contents, "utf-8");
   }
 

@@ -12,3 +12,9 @@ I wanted a tracker to see where my times goes inside of VS Code. I didn't want t
 #### How to view current metrics
 
 Use the status bar item which shows you the last day and seven day usage.
+
+### Plans
+
+By December, I will add a 'wrapped', which will give you some fun metrics based on your usage.
+
+If you want to see the ideas for wrapped, see [./wrapped.md](./wrapped.md), though you might spoil the fun!

@@ -37,7 +37,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			tracker.updateAllDaySeconds();
 
 			updateStats();
-	
+
 			// Let's do a backup save!
 			tracker.save();
 		}, HALF_MINUTE);
@@ -48,9 +48,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 
 	context.subscriptions.push(
-		{dispose: () => {
-			clearInterval(updateInterval);
-		}},
+		{
+			dispose: () => {
+				clearInterval(updateInterval);
+			}
+		},
 		statusBarItem,
 
 		// Branch and extension tracking
@@ -109,12 +111,18 @@ export async function deactivate() {
 }
 
 async function getStatsMd() {
-	const projectIds = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders.map((f) => f.name) : [];
+	const activeEditor = vscode.window.activeTextEditor;
+	let id = activeEditor ? vscode.workspace.getWorkspaceFolder(activeEditor.document.uri)?.name : undefined;
+
+	if (!id) {
+		id = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].name : undefined;
+	}
 
 	let markdown: string[] = [];
 
-	for (let i = 0; i < projectIds.length; i++) {
-		const id = projectIds[i];
+	if (id) {
+
+
 		const today = await tracker.getStatsForPeriod(id, 1);
 		const week = await tracker.getStatsForPeriod(id, 7);
 
@@ -135,15 +143,14 @@ async function getStatsMd() {
 			`* $(debug) ${week.debugs} debug session${week.debugs === 1 ? "" : "s"}`,
 			`* $(output) ${week.tasks} task${week.tasks === 1 ? "" : "s"} started`,
 		);
-
-		if (i < projectIds.length - 1) {
-			markdown.push(
-				``,
-				`---`,
-				``
-			);
-		}
-	};
+	}
+	else {
+		markdown.push(
+			`### No workspace`,
+			``,
+			`No workspace is currently open.`,
+		);
+	}
 
 	const md = new vscode.MarkdownString(markdown.join("\n"));
 	md.supportThemeIcons = true;

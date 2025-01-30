@@ -49,6 +49,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			clearInterval(updateInterval);
 		}},
 		statusBarItem,
+
+		// Branch and extension tracking
 		vscode.workspace.onDidSaveTextDocument((e) => {
 			const ws = vscode.workspace.getWorkspaceFolder(e.uri);
 			if (ws) {
@@ -60,6 +62,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			tracker.addSave(path.extname(e.fileName));
 		}),
+
+		// Workspace tracker
 		vscode.workspace.onDidChangeWorkspaceFolders((e) => {
 			e.added.forEach((folder) => {
 				tracker.startTracking(folder);
@@ -67,7 +71,24 @@ export async function activate(context: vscode.ExtensionContext) {
 			e.removed.forEach((folder) => {
 				tracker.endTracking(folder);
 			});
-		})
+		}),
+
+		// Tasks executed
+		vscode.tasks.onDidStartTask(e => {
+			if (e.execution.task.scope) {
+				const scope = e.execution.task.scope;
+				if (typeof scope === `object`) {
+					tracker.incrementTasks(scope);
+				}
+			}
+		}),
+
+		// Debug tracking
+		vscode.debug.onDidStartDebugSession(e => {
+			if (e.workspaceFolder) {
+				tracker.incrementDebugs(e.workspaceFolder);
+			}
+		}),
 	);
 }
 

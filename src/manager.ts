@@ -5,6 +5,8 @@ import { WorkspaceFolder } from "vscode";
 
 export interface TrackerDetails {
   branches: string[];
+  tasks: number;
+  debugs: number;
   seconds: number;
 }
 
@@ -17,8 +19,8 @@ interface DayData {
   }
 }
 
-type SchemaVersion = "v1";
-const CURRENT_SCHEMA_VERSION: SchemaVersion = `v1`;
+type SchemaVersion = "v1"|"v2";
+const CURRENT_SCHEMA_VERSION: SchemaVersion = `v2`;
 interface TrackerFile {
   version: SchemaVersion;
   days: {[date: string]: DayData}
@@ -75,7 +77,7 @@ export class TimeManager {
    */
   public getStatsForPeriod(project: string, days: number): TrackerDetails {
     const dayKeys = this.getDays(days);
-    const stats: TrackerDetails = { seconds: 0, branches: [] };
+    const stats: TrackerDetails = { seconds: 0, branches: [], tasks: 0, debugs: 0 };
 
     for (const day of dayKeys) {
       const dayStats = this.getStats(day);
@@ -158,7 +160,7 @@ export class TimeManager {
         }
 
       } else {
-        this.store.days[chosenDay].projects[id] = { seconds: 0, branches: [] };
+        this.store.days[chosenDay].projects[id] = { seconds: 0, branches: [], tasks: 0, debugs: 0 };
       }
     };
 
@@ -172,7 +174,7 @@ export class TimeManager {
   }
 
   private updateDetails(projectId: string, details: Partial<TrackerDetails>) {
-    const ADD_PROPS = [`seconds`];
+    const ADD_PROPS: (keyof TrackerDetails)[] = [`seconds`, `tasks`, `debugs`];
     const today = dateString();
     
     this.validateDaySchema(today, {id: projectId});
@@ -184,7 +186,7 @@ export class TimeManager {
         // Merge
         existingData[key] = [...new Set([...(existingData[key] || []), ...(details as any)[key]])];
       } else {
-        if (ADD_PROPS.includes(key)) {
+        if (ADD_PROPS.includes(key as keyof TrackerDetails)) {
           existingData[key] += (details as any)[key];
         } else {
           existingData[key] = (details as any)[key];
@@ -195,6 +197,14 @@ export class TimeManager {
 
   addBranch(ws: WorkspaceFolder, branch: string) {
     this.updateDetails(ws.name, { branches: [branch] });
+  }
+
+  incrementTasks(ws: WorkspaceFolder) {
+    this.updateDetails(ws.name, { tasks: 1 });
+  }
+
+  incrementDebugs(ws: WorkspaceFolder) {
+    this.updateDetails(ws.name, { debugs: 1 });
   }
 
   addSave(ext: string) {

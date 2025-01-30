@@ -8,6 +8,8 @@ I wanted a tracker to see where my times goes inside of VS Code. I didn't want t
 * Seconds with that workspace open
 * What branches you edited on
 * What extensions you're working on and how many times you saved/edited them
+* Tasks executed
+* Debug sessions started
 
 #### How to view current metrics
 

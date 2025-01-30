@@ -1,0 +1,1 @@
+No licence. Do as you wish.

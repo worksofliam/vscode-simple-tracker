@@ -2,7 +2,7 @@
   "name": "vscode-simple-tracker",
   "displayName": "Simple Usage Tracker",
   "description": "Track what you work on inside of VS Code",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "engines": {
     "vscode": "^1.96.0"
   },

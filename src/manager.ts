@@ -13,10 +13,14 @@ export interface TrackerDetails {
 interface DayData {
   projects: {
     [project: string]: TrackerDetails;
-  }
+  };
   saves: {
     [ext: string]: number
-  }
+  };
+  updated: {
+    first: string;
+    last: string;
+  };
 }
 
 type SchemaVersion = "v1" | "v2";
@@ -42,10 +46,14 @@ function dateString(minusDays = 0) {
   return `${specificDate.getDate()}-${specificDate.getMonth() + 1}-${specificDate.getFullYear()}`;
 }
 
+function dateTimeString() {
+  return new Date().toISOString();
+}
+
 class DayManager {
   private exists = false;
   private filePath: string;
-  private store: TrackerFile = { version: CURRENT_SCHEMA_VERSION, day: { projects: {}, saves: {} } };
+  private store: TrackerFile = { version: CURRENT_SCHEMA_VERSION, day: { projects: {}, saves: {}, updated: {first: dateTimeString(), last: dateTimeString()} } };
   constructor(dateString: string) {
     this.filePath = path.join(TRACKER_DIR, `.vscode-tracker-${dateString}.json`);
   }
@@ -79,7 +87,11 @@ class DayManager {
 
   public async save(activeProjects: ActiveProjectList) {
     await this.checkForChanges(activeProjects);
+
+    this.store.day.updated.last = dateTimeString();
+    
     const contents = JSON.stringify(this.store, null, 2);
+
     this.exists = true;
     return await writeFile(this.filePath, contents, "utf-8");
   }
@@ -122,21 +134,20 @@ class DayManager {
    */
   public updateDetails(projectId: string, details: Partial<TrackerDetails>) {
     const ADD_PROPS: (keyof TrackerDetails)[] = [`seconds`, `tasks`, `debugs`];
-    const today = dateString();
 
     this.validate({ id: projectId });
 
-    const existingProjects: any = this.store.day.projects[projectId];
+    const existingProject: any = this.store.day.projects[projectId];
 
     for (const key in details) {
       if (Array.isArray((details as any)[key])) {
         // Merge
-        existingProjects[key] = [...new Set([...(existingProjects[key] || []), ...(details as any)[key]])];
+        existingProject[key] = [...new Set([...(existingProject[key] || []), ...(details as any)[key]])];
       } else {
         if (ADD_PROPS.includes(key as keyof TrackerDetails)) {
-          existingProjects[key] += (details as any)[key];
+          existingProject[key] += (details as any)[key];
         } else {
-          existingProjects[key] = (details as any)[key];
+          existingProject[key] = (details as any)[key];
         }
       }
     }
@@ -166,6 +177,12 @@ class DayManager {
 
     if (!dayObj.saves) {
       dayObj.saves = {};
+    }
+
+    const timeString = dateTimeString();
+
+    if (!dayObj.updated) {
+      dayObj.updated = { first: timeString, last: timeString };
     }
 
     const fixProject = (id: string) => {
